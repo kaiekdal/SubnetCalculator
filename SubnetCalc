@@ -1,0 +1,249 @@
+import java.util.Scanner;
+
+public class SubnetCalc {
+
+    private Scanner input; // Scanner Object
+    private int cidr; // CIDR
+    private String[] copy;// Inputed IP address
+    private String[] ipNumber;
+    private long wire;
+    private long broadcast;
+    private String ipValidate = "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(\\d|[1-2]\\d|3[0-2]))$";
+    private int number;
+    private long ip;
+    private long classAdd;
+
+    public SubnetCalc() {
+
+        input = new Scanner(System.in); // Scanner object
+
+    }
+
+    public void calculate() {
+
+        System.out.print("Enter an IP address in IP/CIDR format: ");
+        String address = input.nextLine(); // converts user input into a char array
+
+        // Checks that user input is valid and if the user enters an IP that starts with
+        // 127, they will be prompted to enter another IP
+        while (!address.matches(ipValidate) || address.startsWith("127") || address.isEmpty()) {
+            if (address.startsWith("127")) {
+                System.out.print("This is a reserved IP address. Please try again.\nEnter an IP address: ");
+                address = input.nextLine();
+            }
+            System.out.print("Invalid input. Please enter a valid IP address: ");
+            address = input.nextLine();
+        }
+
+        int slash = address.indexOf("/"); // stores the index of the slash
+
+        // stores the IP before the slash notation
+        ipNumber = address.substring(0, slash).split("\\.");
+
+        cidr = Integer.parseInt(address.substring(slash + 1, address.length()));
+
+        System.out.println("-----------------------------------------------------------------------------");
+        System.out.println("IP Class: " + defaultClass() + " | CIDR Notation: /" + cidr);
+        System.out.println("Network Address: " + getWireAddress() + " | Broadcast Address: " + getBroadcast());
+
+        System.out.println("Total Number of Hosts: " + totalHosts() + " | Number of Usable Hosts: " + usableHosts());
+
+        System.out.println("Subnet Mask: " + dottedQuad(getSubnet()));
+        System.out.println("Wildcard Mask: " + wildcard());
+        System.out.println("Hex IP: " + toHex());
+        System.out.println("-----------------------------------------------------------------------------");
+
+        System.out.println(
+                "      All of the possible " + totalSubnets() + " networks for " + getWireAddress() + "*" + "\n");
+        System.out.format("%-5s%-30s%-30s%-20s\n", "#", "Network ID", "Range", "Broadcast Address");
+
+        wire = classAdd;
+        getBroadcast();
+        int temp = 0;
+        for (int i = 0; i < totalSubnets(); i++) {
+            System.out.format("%-5s%-20s%-40s%-20s\n", (i), dottedQuad(wire), getHosts(), getBroadcast());
+            if (ip > wire && ip < broadcast) {
+                temp = i;
+            }
+
+            wire += 1 << hostBits();
+            broadcast += 1 << hostBits();
+
+        }
+        System.out.print("The subnet number for " + dottedQuad(ip) + " is " + temp);
+
+    }
+
+    // converts String array items to their binary representation as a List
+    public String[] stringToBinary(String[] s) {
+
+        String[] binary = new String[32];
+        String var;
+
+        // converts items in the string array to an int, then stores the binary
+        // conversion in an array
+        for (int i = 0; i < s.length; i++) {
+            int temp = Integer.parseInt(s[i]);
+            var = String.format("%08s", Integer.toBinaryString(temp));
+            binary[i] += var;
+        }
+
+        return binary;
+
+    }
+
+    // gets the subnet mask for the given ip/cidr
+    public long getSubnet() {
+
+        long max = (long) (Math.pow(2, 32) - 1); // 255.255.255.255
+        long min = (long) (Math.pow(2, 32 - cidr) - 1); // 0.0.0.63
+        long mask = max - min; // 255.255.255.192
+
+        // move 24 bits to the left, then take the first 8 bits; move 16 bits to the
+        // left and take the first 8 bits, etc
+        // shifts to the right each time by 8 bits to the right & then filters
+        dottedQuad(mask);
+
+        return mask;
+    }
+
+    public String getBroadcast() {
+
+        int var = (int) Math.pow(2, hostBits()) - 1;
+        broadcast = (wire + var);
+
+        return dottedQuad(broadcast);
+    }
+
+    public String getHosts() {
+        long last = broadcast - 1;
+        long first = wire + 1;
+
+        return (dottedQuad(first) + " - " + dottedQuad(last));
+    }
+
+    public String getWireAddress() {
+        // do a bitwise AND on the subnet and inputed IP
+        // String[] binIP = stringToBinary(ipNumber);
+
+        ip = 0;
+
+        int var = 0;
+
+        // shift octets by 8 each time to their proper places
+        for (int i = 3; i >= 0; i--) {
+            int num = Integer.parseInt(ipNumber[i]);
+            ip += num << (var);
+            var += 8;
+        }
+
+        wire = getSubnet() & ip;
+
+        return (dottedQuad(wire));
+
+    }
+
+    // returns the default class of the IP
+    public String defaultClass() {
+
+        int octet = Integer.parseInt(ipNumber[0]);
+        String classType = ""; // initializes a variable that will return the class type
+
+        // Checks what class type the first octet of the IP belongs to
+        if (octet >= 1 && octet <= 126) { // class A ranges
+            classType = "A";
+            classAdd = wire & 0xff000000;
+        }
+        if (octet > 127 && octet <= 190) {
+            classType = "B";
+            classAdd = wire & 0xffff0000;
+        }
+        if (octet > 190 && octet <= 223) {
+            classType = "C";
+            classAdd = wire & 0xffffff00;
+        }
+        return classType;
+
+    }
+
+    // returns the default cidr
+    public int defaultSubnet() {
+        String sub = defaultClass();
+
+        int subnet = 0; // initialize a variable
+
+        if (sub.equals("A")) {
+            subnet = 8;
+        } else if (sub.equals("B")) {
+            subnet = 16;
+        } else if (sub.equals("C")) {
+            subnet = 24;
+        }
+
+        return subnet; // the CIDR belonging to the inputed IP's class
+
+    }
+
+    // number of host bits
+    public int hostBits() {
+
+        return (32 - cidr);
+    }
+
+    // number of total hosts
+    public int totalHosts() {
+        return (int) (Math.pow(2, hostBits()));
+    }
+
+    // number of usable hosts
+    public int usableHosts() {
+        return (totalHosts() - 2);
+    }
+
+    // returns the number of borrowed bits
+    public int borrowedBits() {
+
+        return cidr - defaultSubnet();
+
+    }
+
+    // find number of subnets
+    public int totalSubnets() {
+        return ((int) Math.pow(2, borrowedBits()));
+
+    }
+
+    // returns the wildcard mask
+    public String wildcard() {
+
+        int wild = (int) (Math.pow(2, hostBits()) - 1); // 2^host bits
+
+        return dottedQuad(wild);
+
+    }
+   // converts given IP to hexadecimal format
+    public String toHex() {
+
+        String hex = "";
+        for (int i = 0; i < ipNumber.length; i++) {
+            int var = Integer.parseInt(ipNumber[i]);
+            hex += Integer.toHexString(var);
+
+        }
+
+        return hex;
+    }
+
+    // converts a long to ip format by shifting bits to appropriate places
+    public String dottedQuad(long addr) {
+
+        return String.format("%d.%d.%d.%d", (addr >> 24) & 0xff, (addr >> 16) & 0xff, (addr >> 8) & 0xff,
+                (addr & 0xff));
+    }
+
+    public static void main(String[] args) {
+        SubnetCalc sc = new SubnetCalc();
+        sc.calculate();
+
+    }
+}
